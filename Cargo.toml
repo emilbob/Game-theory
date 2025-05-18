@@ -1,0 +1,7 @@
+[package]
+name = "emboth"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+strategies = { git = "https://github.com/Polkadot-Blockchain-Academy/The-Evolution-of-Cooperation-Dependencies", version = "0.1.0" }
