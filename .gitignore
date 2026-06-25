@@ -1,0 +1,6 @@
+# Rust build output (root crate and the questions/ crate)
+target/
+
+# Stray npm artifacts (the root crate is Rust-only; web lives in web/)
+/package-lock.json
+/node_modules

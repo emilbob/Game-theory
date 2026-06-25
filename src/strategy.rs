@@ -50,10 +50,13 @@ submit_strategy!(
 ```
  */
 
+// Keep these uses as is for submit_strategy macro, otherwise you'll have compilation errors.
+// RefCell/Rc are only referenced by the macro's test-time expansion, so they look
+// unused under `cargo build` but are required by `cargo test`.
+#[allow(unused_imports)]
 use core::cell::RefCell;
+#[allow(unused_imports)]
 use std::rc::Rc;
-
-// Keep these uses as is for submit_strategy macro, otherwise you'll have compilation errors
 #[allow(unused_imports)]
 use strategies::Move::*;
 #[allow(unused_imports)]
@@ -62,11 +65,9 @@ use strategies::Round;
 use strategies::*;
 
 #[derive(Named)]
-#[allow(dead_code)]
 struct MyStrategy {
 	last_opponent_move: Option<Move>,
 	is_first_move: bool,
-	cooperation_count: usize,
 	defection_count: usize,
 	forgiveness_threshold: usize,
 	punitive: bool,
@@ -103,10 +104,7 @@ impl Strategy for MyStrategy {
 							Z
 						}
 					},
-					Some(Z) => {
-						self.cooperation_count += 1;
-						Z
-					},
+					Some(Z) => Z,
 					None => Z,
 				}
 			}
@@ -138,7 +136,6 @@ submit_strategy!(
 	MyStrategy {
 		last_opponent_move: None,
 		is_first_move: true,
-		cooperation_count: 0,
 		defection_count: 0,
 		forgiveness_threshold: 3, // Initial threshold
 		punitive: false,
@@ -148,3 +145,82 @@ submit_strategy!(
 	"emboth",
 	"Emil Bob"
 );
+
+#[cfg(test)]
+mod strategy_tests {
+	use super::*;
+	use strategies::Move::{X, Y, Z};
+	use strategies::{Round, Strategy};
+
+	/// Fresh strategy in its starting state (mirrors the `submit_strategy!` init).
+	fn fresh() -> MyStrategy {
+		MyStrategy {
+			last_opponent_move: None,
+			is_first_move: true,
+			defection_count: 0,
+			forgiveness_threshold: 3,
+			punitive: false,
+			punitive_move: X,
+		}
+	}
+
+	/// Play one full round against `opponent_move`: pick a move, then observe the
+	/// round outcome — the same order the real game engine uses.
+	fn step(s: &mut MyStrategy, opponent_move: Move) -> Move {
+		let mine = s.play_for_favoured_move(Z);
+		s.handle_last_round(Round::of(mine, opponent_move), Z);
+		mine
+	}
+
+	#[test]
+	fn opens_with_z_ignoring_favoured_move() {
+		// The favoured move is irrelevant on the first turn — it always offers Z.
+		assert_eq!(fresh().play_for_favoured_move(X), Z);
+		assert_eq!(fresh().play_for_favoured_move(Y), Z);
+	}
+
+	#[test]
+	fn keeps_cooperating_while_opponent_plays_z() {
+		let mut s = fresh();
+		for _ in 0..6 {
+			assert_eq!(step(&mut s, Z), Z);
+		}
+		assert!(!s.punitive);
+	}
+
+	#[test]
+	fn tolerates_a_few_grabs_before_retaliating() {
+		let mut s = fresh();
+		// forgiveness_threshold starts at 3 but shrinks on each defection, so a
+		// steady stream of X grabs trips retaliation on the third round.
+		assert_eq!(step(&mut s, X), Z); // round 1: opening Z
+		assert_eq!(step(&mut s, X), Z); // round 2: still turning the cheek
+		assert_eq!(step(&mut s, X), X); // round 3: retaliate
+		assert!(s.punitive);
+		// While punitive it alternates X/Y to pressure either role.
+		assert_eq!(step(&mut s, X), X);
+		assert_eq!(step(&mut s, X), Y);
+		assert_eq!(step(&mut s, X), X);
+	}
+
+	#[test]
+	fn forgives_and_stands_down_once_opponent_returns_to_z() {
+		let mut s = fresh();
+		step(&mut s, X);
+		step(&mut s, X);
+		assert_eq!(step(&mut s, X), X); // now punitive
+		assert!(s.punitive);
+		// Opponent cooperates: the Z is recorded this round, stand-down comes next.
+		step(&mut s, Z);
+		assert_eq!(step(&mut s, Z), Z);
+		assert!(!s.punitive);
+	}
+
+	#[test]
+	fn grows_more_forgiving_as_opponent_cooperates() {
+		let mut s = fresh();
+		let before = s.forgiveness_threshold;
+		step(&mut s, Z);
+		assert_eq!(s.forgiveness_threshold, before + 1);
+	}
+}

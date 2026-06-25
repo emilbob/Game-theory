@@ -110,6 +110,66 @@ export const BOTS: Bot[] = [
       return 'Z'
     },
   },
+  {
+    key: 'talion',
+    name: 'Talion',
+    desc: 'Plays fair (Z), but if you keep grabbing wins it retaliates until you cooperate — then forgives.',
+    // Faithful port of the Rust `MyStrategy`: forgiving-but-punitive coordination.
+    // The bots are stateless, so we rebuild the strategy's internal state by
+    // replaying every completed round, then make the current decision.
+    fn: (ctx) => {
+      let lastOpp: Move | null = null
+      let isFirst = true
+      let defection = 0
+      let forgiveness = 3
+      let punitive = false
+      let punitiveMove: Move = 'X'
+
+      // One decision step — mirrors `play_for_favoured_move` (and mutates state).
+      const play = (): Move => {
+        if (isFirst) {
+          isFirst = false
+          return 'Z'
+        }
+        if (punitive) {
+          if (lastOpp === 'Z') {
+            punitive = false // opponent cooperated — stand down
+            return 'Z'
+          }
+          const m = punitiveMove
+          punitiveMove = punitiveMove === 'X' ? 'Y' : 'X' // alternate to pressure either role
+          return m
+        }
+        if (lastOpp === 'X' || lastOpp === 'Y') {
+          defection += 1
+          if (defection > forgiveness) {
+            punitive = true
+            punitiveMove = 'X'
+            return 'X'
+          }
+          return 'Z'
+        }
+        return 'Z' // opponent played Z, or no history yet
+      }
+
+      // Post-round update — mirrors `handle_last_round`.
+      const observe = (oppMove: Move) => {
+        lastOpp = oppMove
+        if (oppMove === 'Z') {
+          if (defection > 0) defection -= 1 // forgive a past defection
+          forgiveness += 1 // grow more tolerant
+        } else if (forgiveness > 1) {
+          forgiveness -= 1 // grow less tolerant
+        }
+      }
+
+      for (const h of ctx.history) {
+        play()
+        observe(h.opp)
+      }
+      return play()
+    },
+  },
 ]
 
 export function getBot(key: string): Bot {

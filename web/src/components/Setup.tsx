@@ -13,7 +13,7 @@ export default function Setup({ rounds, setRounds, role, setRole, onStart }: Pro
       <div className="mystery">
         <div className="mystery-mark">?</div>
         <div className="mystery-copy">
-          <b>One of six secret strategies.</b>
+          <b>One of seven secret strategies.</b>
           <span>
             You both need to match — but you each prefer a different letter to win. Their identity
             is hidden until the final whistle. Read their play, steer them toward your letter, then
